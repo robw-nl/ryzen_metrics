@@ -81,12 +81,12 @@ PlasmoidItem {
 
             // --- UI LAYOUT ---
             MetricText { id: cpuTxt }
-            MetricText { id: sep1; text: "|"; font.bold: true; color: "#BBBBBB" }
+            MetricText { id: sep1; text: "▓"; font.bold: true; color: json.sep_color }
 
             MetricText { id: wallTxt }
-            MetricText { id: sep2; text: "|"; font.bold: true; color: "#BBBBBB" }
+            MetricText { id: sep2; text: "▓"; font.bold: true; color: json.sep_color }
             MetricText { id: socWattTxt }
-            MetricText { id: sep3; text: "|"; font.bold: true; color: "#BBBBBB" }
+            MetricText { id: sep3; text: "▓"; font.bold: true; color: json.sep_color }
 
             MetricText { id: socTempTxt }
             SlashSep {}
@@ -109,7 +109,7 @@ PlasmoidItem {
             id: dataSource
             engine: "executable"
             // READING FROM RAM DISK (Low Latency)
-            connectedSources: ["cat /dev/shm/dashboard_panel.txt"]
+            connectedSources: ["cat /dev/shm/system_metrics_panel.json"]
             interval: 1000
             onNewData: function(source, data) {
                 var raw = data["stdout"]
@@ -123,12 +123,15 @@ PlasmoidItem {
         P5Support.DataSource {
             id: tooltipSource
             engine: "executable"
-            // READING FROM RAM DISK
-            connectedSources: ["cat /dev/shm/dashboard_tooltip.txt"]
-            interval: 5000
+            connectedSources: ["cat /dev/shm/system_metrics_tooltip.txt"]
+            interval: 2000 // Check every 2 seconds for the minute-update
             onNewData: function(source, data) {
-                root.popupText = data["stdout"]
+                var out = data["stdout"]
+                if (out && out.length > 10) {
+                    root.popupText = out
+                }
             }
+
         }
     }
 }
