@@ -1,4 +1,5 @@
 #include "discovery.h"
+#include "error_policy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,42 @@ static void read_line(const char *path, char *out, size_t size) {
     }
 }
 
+void verify_system_compatibility(void) {
+    /* 1. Desktop Environment Check */
+    const char *xdg_desktop = getenv("XDG_CURRENT_DESKTOP");
+    const char *kde_session = getenv("KDE_FULL_SESSION");
+
+    int is_kde = 0;
+    if (kde_session && strcmp(kde_session, "true") == 0) is_kde = 1;
+    if (xdg_desktop && strstr(xdg_desktop, "KDE")) is_kde = 1;
+
+    if (!is_kde) {
+        log_error(ERR_FATAL, "Compat", "Unsupported Desktop Environment. KDE Plasma required");
+    }
+
+    /* 2. CPU Architecture Check */
+    FILE *f_cpu = fopen("/proc/cpuinfo", "r");
+    if (f_cpu) {
+        char line[256];
+        int valid_cpu = 0;
+        while (fgets(line, sizeof(line), f_cpu)) {
+            if (strstr(line, "vendor_id")) {
+                if (strstr(line, "AuthenticAMD") || strstr(line, "GenuineIntel")) {
+                    valid_cpu = 1;
+                }
+                break;
+            }
+        }
+        fclose(f_cpu);
+
+        if (!valid_cpu) {
+            log_error(ERR_FATAL, "Compat", "Unsupported Architecture. AMD or Intel required");
+        }
+    } else {
+        log_error(ERR_FATAL, "Compat", "Cannot read /proc/cpuinfo to verify architecture");
+    }
+}
+
 void scan_for_monitor(char *out_path, size_t size) {
     DIR *dr = opendir("/sys/class/drm");
     if (!dr) return;
@@ -68,7 +105,10 @@ void scan_for_monitor(char *out_path, size_t size) {
 // --- NEW: Audio Discovery ---
 static void scan_for_audio(char *out_path, size_t size) {
     DIR *dr = opendir("/proc/asound");
-    if (!dr) return;
+    if (!dr) {
+        log_error(ERR_IGNORABLE, "Discovery", "No /proc/asound found. Audio monitoring disabled.");
+        return;
+    }
 
     struct dirent *en;
     int found_priority = 0; // 0=None, 1=HDMI/PCH, 2=USB(Preferred)

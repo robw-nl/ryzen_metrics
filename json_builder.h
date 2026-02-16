@@ -2,10 +2,10 @@
 #define JSON_BUILDER_H
 
 #include <stdio.h>
+#include <time.h>
 #include "config.h"
 #include "sensors.h"
 
-// Grouping the calculated power values to clean up function arguments
 typedef struct {
     double soc_w;
     double system_w;
@@ -14,10 +14,9 @@ typedef struct {
     double cost;
 } DashboardPower;
 
-// The main formatting function
-void json_build_panel(FILE *fp, const AppConfig *cfg, const SystemVitals *v, const DashboardPower *pwr);
 
-// Tooltip formatting
-void json_build_tooltip(FILE *fp, const AppConfig *cfg, const Accumulator *acc, const DashboardPower *pwr);
+// Parameter 'registered_max' comes from acc.registered_max in daemon.c
+int json_build_panel(FILE *fp, const AppConfig *cfg, const SystemVitals *v, const DashboardPower *pwr, double registered_max);// Parameter 'current_teff' comes from v.current_teff in daemon.c
+int json_build_tooltip(FILE *fp, const AppConfig *cfg, const Accumulator *acc, const DashboardPower *pwr, double current_teff, int maturity_seconds, time_t amber_start);
 
 #endif

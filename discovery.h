@@ -7,5 +7,6 @@
 void discover_hardware(AppConfig *cfg);
 // ADD THIS LINE:
 void scan_for_monitor(char *out_path, size_t size);
+void verify_system_compatibility(void);
 
 #endif

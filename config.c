@@ -1,5 +1,6 @@
 #include "config.h"
 #include "discovery.h"
+#include "error_policy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,7 @@ void set_defaults(AppConfig *c) {
     SET_STR(c->color_safe, "#a6e3a1");
     SET_STR(c->color_warn, "#fab387");
     SET_STR(c->color_crit, "#f38ba8");
-    SET_STR(c->color_sep, "#585b70");
+    SET_STR(c->color_sep, "#008bd1");
     SET_STR(c->ssd_label, "SSD");
 
     // Hardware Defaults
@@ -40,7 +41,7 @@ void set_defaults(AppConfig *c) {
     SET_STR(c->hw_cpu, "k10temp");
     SET_STR(c->hw_net, "r8169");
     SET_STR(c->hw_ram, "spd5118");
-    SET_STR(c->hw_disk, "nvme");
+    SET_STR(c->hw_disk, "nvme"); // <--- NEW Default
     SET_STR(c->path_monitor, "/sys/class/drm/card1-HDMI-A-1/status");
 
     // Threshold Defaults
@@ -51,6 +52,13 @@ void set_defaults(AppConfig *c) {
     SET_VAL(c->limit_net_warn, 50.0); SET_VAL(c->limit_net_crit, 70.0);
     SET_VAL(c->limit_wall_warn, 100.0); SET_VAL(c->limit_wall_crit, 150.0);
     SET_VAL(c->limit_soc_warn, 30.0); SET_VAL(c->limit_soc_crit, 45.0);
+    SET_VAL(c->maturity_required_sec, 1800);
+    SET_VAL(c->trend_break_delta, 5.0);
+
+    // Thermal Model Defaults //
+    SET_VAL(c->maturity_threshold_teff, 39.0);
+    SET_VAL(c->maturity_required_sec, 1800);
+    SET_VAL(c->trend_break_delta, 5.0);
 
     // Power Constants
     SET_VAL(c->psu_efficiency, 0.85);
@@ -75,44 +83,60 @@ void set_defaults(AppConfig *c) {
     SET_VAL(c->mon_off_timeout_sec, 300);
 
     // Paths
-    SET_STR(c->path_panel, "/dev/shm/dashboard_panel.txt");
-    SET_STR(c->path_tooltip, "/dev/shm/dashboard_tooltip.txt");
+    SET_STR(c->path_panel, "/dev/shm/system_metrics_panel.json");
+    SET_STR(c->path_tooltip, "/dev/shm/system_metrics_tooltip.txt");
 
     const char *home = getenv("HOME");
     if (!home) home = getpwuid(getuid())->pw_dir;
-    snprintf(c->path_data, MAX_PATH, "%s/.config/manjaro_system_metrics/data/stats.dat", home);
+    snprintf(c->path_data, MAX_PATH, "%s/.config/system_metrics/stats.dat", home);
 
     SET_STR(c->start_date, "Unknown");
 }
 
 AppConfig load_config(const char *path) {
     AppConfig c;
-    set_defaults(&c);
-    discover_hardware(&c);
+    set_defaults(&c);      /* Initializes all fields with safe values [cite: 2026-01-26] */
+    discover_hardware(&c); /* Probes paths, can be overridden by the file [cite: 2026-02-12] */
 
     FILE *f = fopen(path, "r");
-    if (!f) return c;
+    if (!f) {
+        char err_msg[512];
+        snprintf(err_msg, sizeof(err_msg), "Cannot find config file at %s", path);
+        log_error(ERR_FATAL, "Config", err_msg);
+        /* Safety: Stop if the source of truth is missing [cite: 39] */
+    }
 
     char line[512];
     while (fgets(line, sizeof(line), f)) {
         if (line[0] == '#' || line[0] == '\n') continue;
         char *eq = strchr(line, '=');
         if (!eq) continue;
+
         *eq = '\0';
         char *key = line;
         char *val = eq + 1;
         val[strcspn(val, "\n")] = 0;
 
-        // Hardware
+        if (strcmp(key, "start_date") == 0) {
+            strncpy(c.start_date, val, sizeof(c.start_date) - 1);
+            c.start_date[sizeof(c.start_date) - 1] = '\0';
+        }
+
+        /* --- New Ghost-Buster Calibration --- */
+        PARSE_INT("ghost_freq_min", c.ghost_freq_min);
+        PARSE_DBL("ghost_watt_max", c.ghost_watt_max);
+        PARSE_DBL("ghost_floor", c.ghost_floor);
+
+        /* --- Hardware Hooks --- */
         PARSE_STR("hw_gpu", c.hw_gpu, 32);
         PARSE_STR("hw_cpu", c.hw_cpu, 32);
         PARSE_STR("hw_net", c.hw_net, 32);
         PARSE_STR("hw_ram", c.hw_ram, 32);
-        PARSE_STR("hw_disk", c.hw_disk, 32); // <--- NEW PARSER
+        PARSE_STR("hw_disk", c.hw_disk, 32);
         PARSE_STR("path_monitor", c.path_monitor, 256);
-        PARSE_STR("path_audio", c.path_audio, 256); // <--- NEW PARSER
+        PARSE_STR("path_audio", c.path_audio, 256);
 
-        // UI & Paths
+        /* --- UI & Paths --- */
         PARSE_INT("font_size", c.font_size);
         PARSE_STR("font_family", c.font_family, 64);
         PARSE_STR("color_safe", c.color_safe, 16);
@@ -123,9 +147,9 @@ AppConfig load_config(const char *path) {
         PARSE_STR("start_date", c.start_date, 32);
         PARSE_STR("path_panel", c.path_panel, MAX_PATH);
         PARSE_STR("path_tooltip", c.path_tooltip, MAX_PATH);
-        PARSE_STR("path_data", c.path_data, MAX_PATH);
+        PARSE_STR("path_data_file", c.path_data, MAX_PATH); /* Zone 2 persistence */
 
-        // Thresholds
+        /* --- Thresholds --- */
         PARSE_DBL("limit_mhz_warn", c.limit_mhz_warn);
         PARSE_DBL("limit_mhz_crit", c.limit_mhz_crit);
         PARSE_DBL("limit_temp_warn", c.limit_temp_warn);
@@ -141,7 +165,12 @@ AppConfig load_config(const char *path) {
         PARSE_DBL("limit_soc_warn", c.limit_soc_warn);
         PARSE_DBL("limit_soc_crit", c.limit_soc_crit);
 
-        // Power
+        /* --- Thermal Model (Maturity) --- */
+        PARSE_DBL("maturity_threshold_teff", c.maturity_threshold_teff);
+        PARSE_INT("maturity_required_sec", c.maturity_required_sec);
+        PARSE_DBL("trend_break_delta", c.trend_break_delta);
+
+        /* --- Power Constants --- */
         PARSE_DBL("psu_efficiency", c.psu_efficiency);
         PARSE_DBL("mobo_overhead", c.mobo_overhead);
         PARSE_DBL("pc_rest_base", c.pc_rest_base);
@@ -156,13 +185,14 @@ AppConfig load_config(const char *path) {
         PARSE_DBL("speakers_eco", c.speakers_eco);
         PARSE_DBL("euro_per_kwh", c.euro_per_kwh);
 
-        // Timings
+        /* --- Timings --- */
         PARSE_INT("update_ms", c.update_ms);
         PARSE_INT("sync_sec", c.sync_sec);
         PARSE_INT("speakers_timeout_sec", c.speakers_timeout_sec);
         PARSE_INT("mon_dim_timeout_sec", c.mon_dim_timeout_sec);
         PARSE_INT("mon_off_timeout_sec", c.mon_off_timeout_sec);
     }
+
     fclose(f);
     return c;
 }
