@@ -2,31 +2,40 @@
 # Manjaro Metrics: Comprehensive Config Generator (Audited & Verified)
 
 CONFIG_FILE="metrics.conf"
-# 1. THE SOURCE OF TRUTH: Single path definition [cite: 2026-02-12]
-TARGET_DATA_FILE="/home/rob/.config/system_metrics/stats.dat"
+# 1. THE SOURCE OF TRUTH: Dynamic path definition
+TARGET_DATA_FILE="$HOME/.config/system_metrics/stats.dat"
 
 echo "--- Probing Hardware Architecture ---"
 
-# Discover GPU (Targeting amdgpu for 8700G) [cite: 2026-01-26]
 HW_GPU=$(grep -l "amdgpu" /sys/class/hwmon/hwmon*/name 2>/dev/null | head -n1 | xargs -I{} cat {}/name)
-
-# Discover CPU (Targeting k10temp) [cite: 2026-01-26]
 HW_CPU=$(grep -l "k10temp" /sys/class/hwmon/hwmon*/name 2>/dev/null | head -n1 | xargs -I{} cat {}/name)
-
-# Discover NVMe/SSD [cite: 2026-01-26]
 HW_DISK=$(grep -l "nvme" /sys/class/hwmon/hwmon*/name 2>/dev/null | head -n1 | xargs -I{} cat {}/name)
-
-# Discover RAM (Often jc42 or spd) [cite: 2026-01-26]
 HW_RAM=$(grep -lE "jc42|spd" /sys/class/hwmon/hwmon*/name 2>/dev/null | head -n1 | xargs -I{} cat {}/name)
-
-# Discover Network (Find active interface driver) [cite: 2026-01-26]
 HW_NET=$(ls -l /sys/class/net/ | grep -v "virtual" | head -n 2 | tail -n 1 | awk '{print $9}' | xargs -I{} ethtool -i {} 2>/dev/null | grep "driver" | awk '{print $2}')
-
-# Discover Monitor Status Path [cite: 2026-01-26]
 DRM_PATH=$(find /sys/class/drm/ -name "status" | grep -E "HDMI|DP" | head -n 1)
 
+echo "--- Select Hardware Profile ---"
+echo "1) 8700G Passive Block (Original)"
+echo "2) Standard Desktop (Active Cooling)"
+echo "3) Laptop / Mobile APU"
+read -p "Select profile [1-3]: " PROFILE_CHOICE
+
+case $PROFILE_CHOICE in
+    2)
+        GHOST_FREQ=800; GHOST_WATT=5.0; GHOST_FLOOR=0.5
+        PC_BASE=15.0; MATURITY_THRES=45.0
+        ;;
+    3)
+        GHOST_FREQ=1200; GHOST_WATT=3.0; GHOST_FLOOR=0.1
+        PC_BASE=3.0; MATURITY_THRES=45.0
+        ;;
+    *) # Default to 1 (Passive)
+        GHOST_FREQ=2500; GHOST_WATT=10.0; GHOST_FLOOR=0.1
+        PC_BASE=7.1; MATURITY_THRES=39.0
+        ;;
+esac
+
 echo "--- Resolving System Paths ---"
-# Use Bash Parameter Expansion to get the directory safely [cite: 2026-02-12]
 TARGET_DIR="${TARGET_DATA_FILE%/*}"
 mkdir -p "$TARGET_DIR"
 
@@ -40,35 +49,33 @@ path_panel=/dev/shm/system_metrics_panel.json
 path_tooltip=/dev/shm/system_metrics_tooltip.txt
 
 # --- Zone 2: Persistence (Local SSD) ---
-# Audited: Points to the verified absolute path [cite: 2026-02-12]
 path_data_file=$TARGET_DATA_FILE
 
 # --- General Settings ---
-# Audited: Hardcoded to prevent historical resets [cite: 2026-02-12]
-start_date=28-01-2026
+start_date=$(date +"%d-%m-%Y")
 update_ms=1000
 sync_sec=300
 euro_per_kwh=0.26
 
 # --- Ghost-Buster Calibration (SoC Filter) ---
-ghost_freq_min=2500
-ghost_watt_max=10.0
-ghost_floor=0.1
+ghost_freq_min=$GHOST_FREQ
+ghost_watt_max=$GHOST_WATT
+ghost_floor=$GHOST_FLOOR
 
-# --- Power Constants (8700G Passive Block) ---
+# --- Power Constants ---
 psu_efficiency=0.85
 mobo_overhead=0.05
-pc_rest_base=7.1
+pc_rest_base=$PC_BASE
 periph_watt=3.5
 
-# --- Monitor (MSI Optix MAG272QP) ---
+# --- Monitor ---
 mon_logic=12.0
 mon_backlight_max=26.0
 mon_standby=0.5
 mon_dim_preset=0.2
 mon_brightness_preset=0.75
 
-# --- Speakers (Klipsch The Fives) ---
+# --- Speakers ---
 speakers_eco=2.0
 speakers_standby=10.0
 speakers_active=25.0
@@ -81,7 +88,7 @@ color_safe=#ccccff
 color_warn=#EBCB8B
 color_crit=#BF616A
 color_sep=#BBBBBB
-ssd_label=JAWS
+ssd_label=SSD
 
 # --- Thresholds ---
 limit_mhz_warn=3200.0
@@ -100,7 +107,7 @@ limit_wall_warn=80.0
 limit_wall_crit=110.0
 
 # --- Thermal Model (Maturity) ---
-maturity_threshold_teff=39.0
+maturity_threshold_teff=$MATURITY_THRES
 maturity_required_sec=1800
 trend_break_delta=5.0
 

@@ -39,16 +39,16 @@ DEPS = \$(SRCS:.c=.d)
 
 # DEFAULT TARGET: Standard Binary
 all: CFLAGS = \$(BASE_FLAGS) -O2
-all: clean_objs \$(TARGET)
+all: clean_binaries clean_objs \$(TARGET)
 
 # DEBUG TARGET: Debug Binary
 debug: CFLAGS = \$(BASE_FLAGS) -g -O0
-debug: clean_objs \$(DEBUG_TARGET)
+debug: clean_binaries clean_objs \$(DEBUG_TARGET)
 
 # RELEASE TARGET: Lean and Mean
 release: CFLAGS = \$(BASE_FLAGS) -O3 -march=native -flto
 release: LDFLAGS = -s
-release: clean_objs \$(RELEASE_TARGET)
+release: clean_binaries clean_objs \$(RELEASE_TARGET)
 
 # Rule for Standard Binary
 \$(TARGET): \$(OBJS)
@@ -74,15 +74,17 @@ release: clean_objs \$(RELEASE_TARGET)
 	\$(CC) \$(CFLAGS) -c $< -o \$@
 
 # CLEANUP
-clean:
-	rm -f \$(TARGET) \$(DEBUG_TARGET) \$(RELEASE_TARGET) \$(OBJS) \$(DEPS)
+clean: clean_binaries clean_objs
+
+clean_binaries:
+	@rm -f \$(TARGET) \$(DEBUG_TARGET) \$(RELEASE_TARGET)
 
 clean_objs:
 	@rm -f \$(OBJS) \$(DEPS)
 
 rebuild: clean all
 
-.PHONY: all clean rebuild debug release clean_objs
+.PHONY: all clean rebuild debug release clean_objs clean_binaries
 EOF
 
 echo "✅ Smart Makefile generated for $PROJECT_NAME"

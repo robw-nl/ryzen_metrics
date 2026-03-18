@@ -1,20 +1,34 @@
 #include "power_model.h"
 #include <math.h>
 
+/* --- Safety Macros --- */
+#define CLAMP(val, min, max) ((val) < (min) ? (min) : ((val) > (max) ? (max) : (val)))
+#define GUARD_FLOAT(val, min, max, fallback) (isnan(val) ? (fallback) : CLAMP(val, min, max))
+
 void init_power_model(PowerModelState *state, const AppConfig *cfg) {
     state->audio_cooldown = cfg->speakers_timeout_sec;
     state->last_uptime = 0.0;
-    state->maturity_seconds = 0; // Initialize the new maturity counter
+    state->maturity_seconds = 0;
+    state->smoothed_teff = 0.0;
+    state->amber_start_time = 0;
 }
 
 DashboardPower calculate_power(
     PowerModelState *state,
     const AppConfig *cfg,
-    SystemVitals *v,        // NO const
+    SystemVitals *v,
     const PeripheralState *p,
     const Accumulator *acc
 ) {
-    // 1. Uptime Check (Detect Reboots or Time Skips)
+    /* 0. Sanitize Input Data (Guard against sysfs garbage or NaNs) */
+    v->cpu_mhz  = (int)GUARD_FLOAT((double)v->cpu_mhz, 0.0, 10000.0, 1000.0);
+    v->soc_w    = GUARD_FLOAT(v->soc_w, 0.0, 250.0, cfg->pc_rest_base);
+    v->max_temp = GUARD_FLOAT(v->max_temp, 0.0, 110.0, 40.0);
+    v->ssd_temp = GUARD_FLOAT(v->ssd_temp, 0.0, 110.0, 40.0);
+    v->ram_temp = GUARD_FLOAT(v->ram_temp, 0.0, 110.0, 40.0);
+    v->net_temp = GUARD_FLOAT(v->net_temp, 0.0, 110.0, 40.0);
+
+    /* 1. Uptime Check (Detect Reboots or Time Skips) */
     double uptime = get_uptime();
     if (uptime < state->last_uptime || state->last_uptime == 0) {
         state->audio_cooldown = cfg->speakers_timeout_sec;
@@ -22,60 +36,50 @@ DashboardPower calculate_power(
     }
     state->last_uptime = uptime;
 
-    // 2a. Calculated Weighted T_eff (Net: 40%, RAM: 40%, SoC: 20%)
-    // This defines the "effective" temperature of your passive chassis
+    /* 2a. Calculated Weighted T_eff (Net: 40%, RAM: 40%, SoC: 20%) */
     double raw_teff = (v->net_temp * 0.4) + (v->ram_temp * 0.4) + (v->max_temp * 0.2);
 
-    // 2b. Apply Smoothing (The Digital Sink)
-    // If first run, jump straight to raw, otherwise move slowly
+    /* 2b. Apply Smoothing (The Digital Sink) */
     if (state->smoothed_teff < 1.0) {
         state->smoothed_teff = raw_teff;
     } else {
-        double alpha = 0.001; // Adjust this to make the 'sink' slower or faster
+        double alpha = 0.001;
         state->smoothed_teff += alpha * (raw_teff - state->smoothed_teff);
     }
-    // 2c. Save the result back to SystemVitals for the UI
+
+    /* 2c. Save the result back to SystemVitals for the UI */
     v->current_teff = state->smoothed_teff;
 
-    // 2d. Amber Hold Timer Logic
-    // Define the limit based on learned baseline + config delta
-    double amber_limit = acc->registered_max + cfg->trend_break_delta; // [cite: 7, 56]
-
+    /* 2d. Amber Hold Timer Logic */
+    double amber_limit = acc->registered_max + cfg->trend_break_delta;
     if (v->current_teff > amber_limit) {
-        // If we just crossed the limit, mark the start time
         if (state->amber_start_time == 0) {
-            state->amber_start_time = time(NULL); //
+            state->amber_start_time = time(NULL);
         }
     } else {
-        // Reset when we drop back to Gray zone
         state->amber_start_time = 0;
     }
 
-    // 3. Maturity Logic (Self-Calibration Gate)
-    // Counts seconds above the 39C threshold toward a "Usage Day"
+    /* 3. Maturity Logic (Self-Calibration Gate) */
     if (v->current_teff > cfg->maturity_threshold_teff) {
         state->maturity_seconds++;
     }
 
-    // 4. Dynamic Audio Logic [cite: 2026-02-12]
+    /* 4. Dynamic Audio Logic */
     double audio_w = 0.0;
     if (p->is_audio_active) {
-        /* Use a squared ratio to model logarithmic power draw [cite: 2026-02-12] */
         double volume_sq = p->volume_ratio * p->volume_ratio;
         double range = cfg->speakers_active - cfg->speakers_standby;
-
         audio_w = cfg->speakers_standby + (volume_sq * range);
         state->audio_cooldown = cfg->speakers_timeout_sec;
     } else if (state->audio_cooldown > 0) {
-        /* Keep in standby until the timeout expires [cite: 2026-02-12] */
         audio_w = cfg->speakers_standby;
         state->audio_cooldown--;
     } else {
-        /* Drop to eco/off state [cite: 2026-02-12] */
         audio_w = cfg->speakers_eco;
     }
 
-    // 5. Monitor Logic
+    /* 5. Monitor Logic */
     double mon_w = 0.0;
     if (p->is_monitor_connected == 0) {
         mon_w = 0.0;
@@ -87,14 +91,14 @@ DashboardPower calculate_power(
         mon_w = cfg->mon_logic + (cfg->mon_brightness_preset * cfg->mon_backlight_max);
     }
 
-    // 6. Wattage Summation
+    /* 6. Wattage Summation */
     DashboardPower pwr;
     pwr.soc_w = v->soc_w;
     pwr.system_w = cfg->pc_rest_base + (pwr.soc_w * cfg->mobo_overhead);
     pwr.ext_w = mon_w + cfg->periph_watt + audio_w;
     pwr.wall_w = ((pwr.soc_w + pwr.system_w) / cfg->psu_efficiency) + pwr.ext_w;
 
-    // 7. Cost Calculation
+    /* 7. Cost Calculation */
     pwr.cost = (acc->total_ws / 3600000.0) * cfg->euro_per_kwh;
 
     return pwr;

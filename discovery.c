@@ -102,7 +102,7 @@ void scan_for_monitor(char *out_path, size_t size) {
     closedir(dr);
 }
 
-// --- NEW: Audio Discovery ---
+// --- Audio Discovery ---
 static void scan_for_audio(char *out_path, size_t size) {
     DIR *dr = opendir("/proc/asound");
     if (!dr) {
