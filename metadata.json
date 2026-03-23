@@ -8,13 +8,13 @@
             }
         ],
         "Category": "System Information",
-        "Description": "Reads metrics from C Daemon in /dev/shm",
+        "Description": "Reads AMD Ryzen based system metrics from C Daemon in /dev/shm",
         "Icon": "utilities-system-monitor",
-        "Id": "com.rob.manjarometrics",
-        "Name": "Manjaro System Metrics",
+        "Id": "com.rob.ryzenmetrics",
+        "Name": "Ryzen System Metrics",
         "Version": "2.0",
         "License": "GPL-2.0+",
-        "Website": "https://github.com/robw-nl/manjaro_system_metrics"
+        "Website": "https://github.com/robw-nl/ryzen_metrics"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

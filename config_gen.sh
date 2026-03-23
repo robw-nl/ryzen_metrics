@@ -1,5 +1,5 @@
 #!/bin/bash
-# Manjaro Metrics: Comprehensive Config Generator (Audited & Verified)
+# Ryzen Metrics: Comprehensive Config Generator (Audited & Verified)
 
 CONFIG_FILE="metrics.conf"
 # 1. THE SOURCE OF TRUTH: Dynamic path definition
@@ -42,7 +42,7 @@ mkdir -p "$TARGET_DIR"
 echo "Generating Full $CONFIG_FILE..."
 
 cat <<EOF > "$CONFIG_FILE"
-# --- Manjaro System Metrics: Full Calibration Configuration ---
+# --- Ryzen System Metrics: Full Calibration Configuration ---
 
 # --- Zone 1: Fast Lane (Shared RAM) ---
 path_panel=/dev/shm/system_metrics_panel.json

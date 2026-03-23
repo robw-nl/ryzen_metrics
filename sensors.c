@@ -102,8 +102,8 @@ void init_sensors(SensorContext *ctx, const AppConfig *cfg) {
     }
 
     /* Standard Hardware Monitor Init */
-    ctx->fp_gpu_power = find_and_open_hwmon(cfg->hw_gpu, "power1_average");
-    if (!ctx->fp_gpu_power) ctx->fp_gpu_power = find_and_open_hwmon(cfg->hw_gpu, "power1_input");
+    ctx->fp_gpu_power = find_and_open_hwmon(cfg->hw_gpu, "power1_input");
+    if (!ctx->fp_gpu_power) ctx->fp_gpu_power = find_and_open_hwmon(cfg->hw_gpu, "power1_average");
     if (!ctx->fp_gpu_power) log_error(ERR_RECOVERABLE, "Sensors", "GPU power sensor missing. Using 7.0W fallback.");
 
     ctx->fp_cpu_temp = find_and_open_hwmon(cfg->hw_cpu, "temp1_input");
@@ -166,25 +166,29 @@ SystemVitals read_fast_vitals(SensorContext *ctx, const AppConfig *cfg) {
         v.cpu_mhz = ctx->last_valid_cpu_mhz;
     }
 
-    /* 2. SoC Power with Ghost-Buster Shield v2 */
+    /* 2. SoC Power with Ghost-Buster Shield v3 */
     if (ctx->fp_gpu_power) {
         rewind(ctx->fp_gpu_power);
         if (fscanf(ctx->fp_gpu_power, "%lf", &val_buf) == 1) {
             double current_reading = val_buf / 1000000.0;
             if (v.cpu_mhz > cfg->ghost_freq_min) {
-                if (current_reading < cfg->ghost_watt_max ||
-                    (ctx->last_valid_soc_w > 0 && current_reading < (ctx->last_valid_soc_w * 0.5))) {
+                /* Fix: Removed the (ctx->last_valid_soc_w * 0.5) trap to prevent peak latching */
+                if (current_reading < cfg->ghost_watt_max) {
                     v.soc_w = ctx->last_valid_soc_w;
-                    } else {
-                        v.soc_w = current_reading;
-                        ctx->last_valid_soc_w = current_reading;
-                    }
+                    #ifdef DEBUG_OUTPUT
+                    /* Diagnostic output routed to debug build only */
+                    fprintf(stderr, "[DEBUG] Ghost filtered: %fW clamped to %fW\n", current_reading, ctx->last_valid_soc_w);
+                    #endif
+                } else {
+                    v.soc_w = current_reading;
+                    ctx->last_valid_soc_w = current_reading;
+                }
             } else {
                 v.soc_w = current_reading;
-                ctx->last_valid_soc_w = (current_reading > 0.1) ? current_reading : ctx->last_valid_soc_w;
+                ctx->last_valid_soc_w = (current_reading > cfg->ghost_floor) ? current_reading : ctx->last_valid_soc_w;
             }
         } else {
-            v.soc_w = ctx->last_valid_soc_w; /* Guard fallback */
+            v.soc_w = ctx->last_valid_soc_w;
         }
     } else {
         v.soc_w = ctx->last_valid_soc_w;
@@ -235,8 +239,36 @@ int check_monitor_connected(SensorContext *ctx) {
 
 int check_audio_active(SensorContext *ctx) {
     if (!ctx->fp_audio_status) return 0;
-    char status[64]; rewind(ctx->fp_audio_status);
-    if (fgets(status, sizeof(status), ctx->fp_audio_status)) if (strstr(status, "RUNNING")) return 1;
+
+    char line[128];
+    int is_running = 0;
+    long current_hw_ptr = -1;
+
+    rewind(ctx->fp_audio_status);
+
+    while (fgets(line, sizeof(line), ctx->fp_audio_status)) {
+        if (strstr(line, "state: RUNNING")) {
+            is_running = 1;
+        } else if (strncmp(line, "hw_ptr", 6) == 0) {
+            sscanf(line, "hw_ptr : %ld", &current_hw_ptr);
+        }
+    }
+
+    if (is_running && current_hw_ptr != -1) {
+        if (current_hw_ptr != ctx->last_hw_ptr) {
+            ctx->last_hw_ptr = current_hw_ptr;
+            return 1;
+        }
+
+        #ifdef DEBUG_OUTPUT
+        /* Output excluded from release build automatically */
+        fprintf(stderr, "[DEBUG] Audio RUNNING but hw_ptr stalled at %ld. Forcing standby.\n", current_hw_ptr);
+        #endif
+
+        return 0;
+    }
+//
+    ctx->last_hw_ptr = -1;
     return 0;
 }
 

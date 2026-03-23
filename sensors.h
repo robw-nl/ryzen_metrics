@@ -38,6 +38,7 @@ typedef struct {
     double last_valid_ssd_temp;
     double last_valid_ram_temp;
     double last_valid_net_temp;
+    long last_hw_ptr; /* Tracks ALSA ring buffer advancement */
 } SensorContext;
 
 void init_sensors(SensorContext *ctx, const AppConfig *cfg);

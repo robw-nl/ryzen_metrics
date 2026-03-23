@@ -36,6 +36,8 @@ typedef struct {
     double limit_net_warn, limit_net_crit;
     double limit_wall_warn, limit_wall_crit;
     double limit_soc_warn, limit_soc_crit;
+    double limit_soc_power_warn;
+    double limit_soc_power_crit;
     double psu_efficiency, mobo_overhead, pc_rest_base, periph_watt;
     double mon_standby, mon_logic, mon_backlight_max;
     double speakers_active, speakers_standby, speakers_eco, euro_per_kwh;

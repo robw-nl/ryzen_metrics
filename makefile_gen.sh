@@ -1,5 +1,6 @@
 #!/bin/bash
-PROJECT_NAME=${1:-$(basename "$PWD")}
+# Hardcoded to new infrastructure standard
+PROJECT_NAME="ryzen_metrics_daemon"
 
 # --- UNIVERSAL DYNAMIC DISCOVERY (Enhanced for Folders) ---
 RAW_INCLUDES=$(grep -h "#include" *.c 2>/dev/null | tr -d '\r' | awk -F'[<">]' '{print $2}' | sed 's/\.h//g')
@@ -39,16 +40,20 @@ DEPS = \$(SRCS:.c=.d)
 
 # DEFAULT TARGET: Standard Binary
 all: CFLAGS = \$(BASE_FLAGS) -O2
-all: clean_binaries clean_objs \$(TARGET)
+all: clean_objs \$(TARGET)
 
 # DEBUG TARGET: Debug Binary
 debug: CFLAGS = \$(BASE_FLAGS) -g -O0
-debug: clean_binaries clean_objs \$(DEBUG_TARGET)
+debug: clean_objs \$(DEBUG_TARGET)
 
 # RELEASE TARGET: Lean and Mean
-release: CFLAGS = \$(BASE_FLAGS) -O3 -march=native -flto
+release: CFLAGS = \$(BASE_FLAGS) -O3 -march=znver4 -mtune=znver4 -flto
 release: LDFLAGS = -s
-release: clean_binaries clean_objs \$(RELEASE_TARGET)
+release: clean_objs \$(RELEASE_TARGET)
+	@echo "--- Archiving Production Binary ---"
+	@mkdir -p /home/rob/Files/C/production_binaries/system_metrics/
+	@cp \$(RELEASE_TARGET) /home/rob/Files/C/production_binaries/system_metrics/
+	@echo "--- Production Archive Updated (Not Started) ---"
 
 # Rule for Standard Binary
 \$(TARGET): \$(OBJS)
@@ -74,17 +79,15 @@ release: clean_binaries clean_objs \$(RELEASE_TARGET)
 	\$(CC) \$(CFLAGS) -c $< -o \$@
 
 # CLEANUP
-clean: clean_binaries clean_objs
-
-clean_binaries:
-	@rm -f \$(TARGET) \$(DEBUG_TARGET) \$(RELEASE_TARGET)
+clean:
+	rm -f \$(TARGET) \$(DEBUG_TARGET) \$(RELEASE_TARGET) \$(OBJS) \$(DEPS)
 
 clean_objs:
 	@rm -f \$(OBJS) \$(DEPS)
 
 rebuild: clean all
 
-.PHONY: all clean rebuild debug release clean_objs clean_binaries
+.PHONY: all clean rebuild debug release clean_objs
 EOF
 
 echo "✅ Smart Makefile generated for $PROJECT_NAME"

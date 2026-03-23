@@ -1,30 +1,34 @@
 #!/bin/bash
-# Manjaro System Metrics - Safe Deployment Pipeline
+# Ryzen System Metrics - Safe Deployment Pipeline
 
 # --- 1. Define Standard Paths ---
 BIN_DIR="$HOME/.local/bin"
 CONF_DIR="$HOME/.config/system_metrics"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 APPLET_DIR="../com.rob.ryzenmetrics"
+SERVICE_NAME="ryzen_metrics_daemon_release.service"
 
 echo "--- Starting Deployment Pipeline ---"
 
 # --- 2. Binary Deployment ---
 mkdir -p "$BIN_DIR"
-if [ -f "daemon_release" ]; then
+
+if [ -f "ryzen_metrics_daemon_release" ]; then
     echo "-> Found Release binary. Deploying..."
-    install -m 755 daemon_release "$BIN_DIR/manjaro_metrics_daemon"
-elif [ -f "daemon" ]; then
+    install -m 755 ryzen_metrics_daemon_release "$BIN_DIR/ryzen_metrics_daemon_release"
+    ACTIVE_BIN="ryzen_metrics_daemon_release"
+elif [ -f "ryzen_metrics_daemon" ]; then
     echo "-> Found Standard binary. Deploying..."
-    install -m 755 daemon "$BIN_DIR/manjaro_metrics_daemon"
-elif [ -f "daemon_debug" ]; then
+    install -m 755 ryzen_metrics_daemon "$BIN_DIR/ryzen_metrics_daemon"
+    ACTIVE_BIN="ryzen_metrics_daemon"
+elif [ -f "ryzen_metrics_daemon_debug" ]; then
     echo "-> Found Debug binary. Deploying..."
-    install -m 755 daemon_debug "$BIN_DIR/manjaro_metrics_daemon"
+    install -m 755 ryzen_metrics_daemon_debug "$BIN_DIR/ryzen_metrics_daemon_debug"
+    ACTIVE_BIN="ryzen_metrics_daemon_debug"
 else
     echo "-> ERROR: No compiled binary found! Run 'make release', 'make', or 'make debug' first."
     exit 1
 fi
-chmod +x "$BIN_DIR/manjaro_metrics_daemon"
 
 # --- 3. Configuration Guard ---
 mkdir -p "$CONF_DIR"
@@ -43,14 +47,14 @@ fi
 # --- 4. Systemd Service Integration ---
 echo "-> Configuring user systemd service..."
 mkdir -p "$SYSTEMD_DIR"
-cat <<EOF > "$SYSTEMD_DIR/system_metrics.service"
+cat <<EOF > "$SYSTEMD_DIR/$SERVICE_NAME"
 [Unit]
-Description=Manjaro System Metrics Daemon
+Description=Ryzen System Metrics Daemon
 After=plasma-workspace.target
 
 [Service]
 Type=simple
-ExecStart=$BIN_DIR/manjaro_metrics_daemon
+ExecStart=$BIN_DIR/$ACTIVE_BIN
 Restart=on-failure
 RestartSec=5
 
@@ -59,14 +63,21 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable system_metrics.service
-systemctl --user restart system_metrics.service
+
+# Tear down the legacy service if it exists
+if systemctl --user is-active --quiet system_metrics.service; then
+    systemctl --user stop system_metrics.service
+    systemctl --user disable system_metrics.service
+    rm -f "$SYSTEMD_DIR/system_metrics.service"
+fi
+
+systemctl --user enable $SERVICE_NAME
+systemctl --user restart $SERVICE_NAME
 
 # --- 5. Plasma Applet Installation/Upgrade ---
 echo "-> Processing Plasma Applet..."
 if [ -d "$APPLET_DIR" ]; then
-    # Check if already installed
-    if kpackagetool6 -t Plasma/Applet -l | grep -q "com.rob.manjarometrics"; then
+    if kpackagetool6 -t Plasma/Applet -l | grep -q "com.rob.ryzenmetrics"; then
         echo "-> Upgrading existing Plasmoid..."
         kpackagetool6 -t Plasma/Applet -u "$APPLET_DIR"
     else

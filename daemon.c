@@ -32,6 +32,26 @@ do { \
     } \
 } while(0)
 
+/* --- Micro-Latency Profiler --- */
+#ifdef DEBUG_OUTPUT
+#define MICRO_WATCHDOG_START() \
+struct timespec mwd_start, mwd_end; \
+clock_gettime(CLOCK_MONOTONIC, &mwd_start);
+
+#define MICRO_WATCHDOG_END(task_name, limit_ms) \
+do { \
+    clock_gettime(CLOCK_MONOTONIC, &mwd_end); \
+    double mwd_elapsed = (mwd_end.tv_sec - mwd_start.tv_sec) * 1000.0 + \
+    (mwd_end.tv_nsec - mwd_start.tv_nsec) / 1000000.0; \
+    if (mwd_elapsed > (limit_ms)) { \
+        fprintf(stderr, "[Debug Output] %s blocked for %.2f ms\n", task_name, mwd_elapsed); \
+    } \
+} while(0)
+#else
+#define MICRO_WATCHDOG_START()
+#define MICRO_WATCHDOG_END(task_name, limit_ms)
+#endif
+
 void ensure_paths_exist(const char* data_path) {
     char dir_path[512];
     strncpy(dir_path, data_path, sizeof(dir_path) - 1);
@@ -117,16 +137,25 @@ int main() {
         WATCHDOG_START()
 
         DashboardPower pwr;
+
+        MICRO_WATCHDOG_START()
         periph_cache.is_monitor_connected = check_monitor_connected(&sensors);
         periph_cache.is_audio_active = check_audio_active(&sensors);
+        MICRO_WATCHDOG_END("Peripheral check (drm/proc)", 20.0);
 
         /* Persistent ALSA Call */
         if (periph_cache.is_audio_active) {
             if (tick % 5 == 0) periph_cache.volume_ratio = check_audio_volume(&sensors);
-        } else { periph_cache.volume_ratio = 0.0; }
+        } else {
+            periph_cache.volume_ratio = 0.0;
+        }
 
+        MICRO_WATCHDOG_START()
         v = read_fast_vitals(&sensors, &cfg);
+        MICRO_WATCHDOG_END("read_fast_vitals (hwmon/cpufreq)", 20.0);
+
         pwr = calculate_power(&logic_state, &cfg, &v, &periph_cache, &acc);
+
         acc.total_ws += pwr.wall_w;
         acc.total_sec += 1.0;
 

@@ -52,6 +52,8 @@ void set_defaults(AppConfig *c) {
     SET_VAL(c->limit_net_warn, 50.0); SET_VAL(c->limit_net_crit, 70.0);
     SET_VAL(c->limit_wall_warn, 100.0); SET_VAL(c->limit_wall_crit, 150.0);
     SET_VAL(c->limit_soc_warn, 30.0); SET_VAL(c->limit_soc_crit, 45.0);
+    SET_VAL(c->limit_soc_power_warn, 45.0);
+    SET_VAL(c->limit_soc_power_crit, 60.0);
     SET_VAL(c->maturity_required_sec, 1800);
     SET_VAL(c->trend_break_delta, 5.0);
 
@@ -164,6 +166,8 @@ AppConfig load_config(const char *path) {
         PARSE_DBL("limit_wall_crit", c.limit_wall_crit);
         PARSE_DBL("limit_soc_warn", c.limit_soc_warn);
         PARSE_DBL("limit_soc_crit", c.limit_soc_crit);
+        PARSE_DBL("limit_soc_power_warn", c.limit_soc_power_warn);
+        PARSE_DBL("limit_soc_power_crit", c.limit_soc_power_crit);
 
         /* --- Thermal Model (Maturity) --- */
         PARSE_DBL("maturity_threshold_teff", c.maturity_threshold_teff);
