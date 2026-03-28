@@ -2,8 +2,6 @@
 
 Linux (KDE Plasma 6) system metrics dashboard written in C, optimized for the AMD Ryzen 8700G and CachyOS kernels. The project is modularized into specialized units to ensure high performance and easy debugging.
 
-**The Components:**
-
 **Core Engine Architecture**
 - daemon.c: The orchestrator. It manages the main loop, handles the 1s "Fast Lane" (power/freq) and 5s "Slow Lane" (thermals) polling, and enforces the 30s UI heartbeat. It includes a 1.5x cycle watchdog to detect and report blocking I/O on sysfs reads.
 - config.c / config.h: The configuration parser. It strictly resolves to the XDG standard path (~/.config/system_metrics/metrics.conf). It implements "Fail-Fast" validation—if a required value is missing or malformed, the - daemon notifies the user via system notification and exits immediately.
@@ -26,10 +24,9 @@ Linux (KDE Plasma 6) system metrics dashboard written in C, optimized for the AM
 - Deployment Pipeline (deploy.sh): A state-aware bash script that safely installs the compiled binary to ~/.local/bin/, registers the Plasmoid with kpackagetool6, and seamlessly integrates the daemon into the KDE Plasma session via a user-level systemd service (ryzen_metrics_daemon_release.service).
 
 **Getting Started for Contributors**
-We follow a high-discipline, "Short Run" development approach. Code is improved in manageable chunks, followed immediately by assessment, debugging, and verification before proceeding to the next iteration.
+- We follow a high-discipline, "Short Run" development approach. Code is improved in manageable chunks, followed immediately by assessment, debugging, and verification before proceeding to the next iteration.
 Development Environment
-
-Kate is used as the primary C IDE with Clang. The project is structured around a smart Makefile generator bash script (makefile_gen.sh) that handles header discovery automatically.
+- Kate is used as the primary C IDE with Clang. The project is structured around a smart Makefile generator bash script (makefile_gen.sh) with fully autonomous header discovery.
 
 **Recommended Kate Shortcuts**
 - Ctrl+Meta+D: Build Debug Target (make debug).
