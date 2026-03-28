@@ -1,4 +1,5 @@
 **Ryzen System Metrics**
+
 Linux (KDE Plasma 6) system metrics dashboard written in C, optimized for the AMD Ryzen 8700G and CachyOS kernels. The project is modularized into specialized units to ensure high performance and easy debugging.
 
 **The Components:**
