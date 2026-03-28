@@ -1,0 +1,76 @@
+Ryzen System Metrics
+
+Linux (KDE Plasma 6) system metrics dashboard written in C, optimized for the AMD Ryzen 8700G and CachyOS kernels.
+The Components
+
+The project is modularized into specialized units to ensure high performance and easy debugging.
+Core Engine Architecture
+
+    daemon.c: The orchestrator. It manages the main loop, handles the 1s "Fast Lane" (power/freq) and 5s "Slow Lane" (thermals) polling, and enforces the 30s UI heartbeat. It includes a 1.5x cycle watchdog to detect and report blocking I/O on sysfs reads.
+
+    config.c / config.h: The configuration parser. It strictly resolves to the XDG standard path (~/.config/system_metrics/metrics.conf). It implements "Fail-Fast" validation—if a required value is missing or malformed, the daemon notifies the user via system notification and exits immediately.
+
+    sensors.c / sensors.h: The hardware abstraction layer. This is where we use pread() on low-level file descriptors to bypass glibc buffering, ensuring frequency data is never "stale." It includes a Persistent ALSA Handle to eliminate kernel overhead and interrupt latency during audio polling. Additionally, it uses a Squared-Ratio Audio Curve (scaling up to 35W) and the Ghost-Buster Shield v2 to filter Ryzen 8700G and similar processor reporting transients.
+
+Specialized Logic
+
+    power_model.c / power_model.h: The brain of the telemetry. It calculates "Wall Watts" using PSU efficiency curves and includes the "Ghost-Buster" filter to ignore 0W reporting spikes common on the Ryzen 8700G.
+
+    discovery.c / discovery.h: Automates hardware pathing. It probes /sys/class/hwmon and /sys/class/drm to dynamically find the correct sensors for your specific motherboard and GPU.
+
+    json_builder.c / json_builder.h: A lightweight, dependency-free JSON generator using strictly sized 2048-byte stack buffers to prevent overflow from configuration bloat. It outputs a minified, single-line payload optimized for the Plasma DataEngine and includes automatic NaN clamping to filter out hardware reporting anomalies.
+
+Frontend & Configuration
+
+    Main.qml: The Plasma 6 widget. It parses the JSON from /dev/shm and handles the visual state, including the dynamic "Red/Amber/Yellow" color-coding for thresholds.
+
+    metrics.conf: The user control center located at ~/.config/system_metrics/metrics.conf. Contains all hardware-specific calibration values, power loss factors, and UI warning limits.
+
+    Makefile: Generated for your specific development environment. Supports three build targets: debug, all (standard), and release with appropriate optimization levels.
+
+Key Documentation Highlights
+
+    Zero-Malloc Principle: The daemon avoids dynamic memory allocation during the main loop to prevent fragmentation and memory leaks over long-term runs.
+
+    Topology Awareness: In sensors.c, the daemon reads the CPU sibling lists to distinguish between physical cores and logical threads, ensuring the reported MHz average is a realistic representation of system work.
+
+    The "Sync" Logic: In daemon.c, high-priority data is written immediately to RAM (/dev/shm), while "Thermal Maturity" and long-term accumulators are synced to the SSD every 5 minutes to protect your hardware.
+
+    Deployment Pipeline (deploy.sh): A state-aware bash script that safely installs the compiled binary to ~/.local/bin/, registers the Plasmoid with kpackagetool6, and seamlessly integrates the daemon into the KDE Plasma session via a user-level systemd service (ryzen_metrics_daemon_release.service).
+
+Getting Started for Contributors
+
+We follow a high-discipline, "Short Run" development approach. Code is improved in manageable chunks, followed immediately by assessment, debugging, and verification before proceeding to the next iteration.
+Development Environment
+
+Kate is used as the primary C IDE with Clang. The project is structured around a smart Makefile generator bash script (makefile_gen.sh) that handles header discovery automatically.
+
+Recommended Kate Shortcuts:
+
+    Ctrl+Meta+D: Build Debug Target (make debug).
+
+    Ctrl+Meta+B: Build Standard Target (make).
+
+    Ctrl+Meta+R: Build Release Target & Archive (make release).
+
+    Ctrl+Meta+E: Execute Deployment (./deploy.sh).
+
+Coding Standards
+
+    No malloc in the Fast Lane: To ensure long-term stability on passive systems, all polling logic must use fixed-size buffers or stack allocation.
+
+    CachyOS/znver4 Optimization: The release target uses aggressive -O3, -march=znver4, and Link Time Optimization (-flto) to leverage modern Ryzen instruction sets.
+
+    Low-Level I/O: Use pread() on file descriptors rather than buffered fscanf for frequency-sensitive sysfs files to bypass the glibc cache.
+
+    Thermal Maturity Logic: Chassis baseline (registered_max) only recalibrates after 5 distinct heat-mature sessions (30 mins each), allowing for natural seasonal drift without false "Amber" triggers.
+
+    San Verified: The codebase is verified via AddressSanitizer for zero leaks and buffer safety.
+
+How to Contribute
+
+    Iterate Small: Do not submit massive architectural shifts. We prefer small, verified updates that maintain the ~1.3 MB footprint.
+
+    Verify on Hardware: If you are testing on Intel or ARM, please note your hardware specs (e.g., NUC, Raspberry Pi) in the PR.
+
+    Document Logic: If you add a new filter (like our "Ghost-Buster" or "Maturity" logic), include comments explaining the math and the hardware behavior it addresses.
