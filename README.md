@@ -39,7 +39,6 @@ Recommended Kate Shortcuts:
 - Ctrl+Meta+E: Execute Deployment (./deploy.sh).
 
 Coding Standards
-
 - No malloc in the Fast Lane: To ensure long-term stability on passive systems, all polling logic must use fixed-size buffers or stack allocation.
 - CachyOS/znver4 Optimization: The release target uses aggressive -O3, -march=znver4, and Link Time Optimization (-flto) to leverage modern Ryzen instruction sets.
 - Low-Level I/O: Use pread() on file descriptors rather than buffered fscanf for frequency-sensitive sysfs files to bypass the glibc cache.
@@ -47,6 +46,6 @@ Coding Standards
 - San Verified: The codebase is verified via AddressSanitizer for zero leaks and buffer safety.
 
 How to Contribute
-Iterate Small: Do not submit massive architectural shifts. We prefer small, verified updates that maintain the ~1.3 MB footprint.
-Verify on Hardware: If you are testing on Intel or ARM, please note your hardware specs (e.g., NUC, Raspberry Pi) in the PR.
-Document Logic: If you add a new filter (like our "Ghost-Buster" or "Maturity" logic), include comments explaining the math and the hardware behavior it addresses.
+- Iterate Small: Do not submit massive architectural shifts. We prefer small, verified updates that maintain the ~1.3 MB footprint.
+- Verify on Hardware: If you are testing on Intel or ARM, please note your hardware specs (e.g., NUC, Raspberry Pi) in the PR.
+- Document Logic: If you add a new filter (like our "Ghost-Buster" or "Maturity" logic), include comments explaining the math and the hardware behavior it addresses.
